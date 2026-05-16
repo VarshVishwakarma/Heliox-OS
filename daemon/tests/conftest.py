@@ -1,19 +1,62 @@
 """Shared test fixtures."""
 
 import pytest
+from typing import Callable, Any
 
 from pilot.config import PilotConfig
 
 
 @pytest.fixture
-def default_config():
-    """A PilotConfig with all defaults."""
-    return PilotConfig()
+def config_factory() -> Callable[..., PilotConfig]:
+    """
+    Factory fixture to create isolated PilotConfig instances.
+    
+    Returns a callable that accepts keyword arguments to override
+    default configuration values, ensuring each test gets a fresh state.
+    """
+    def _factory(**kwargs: Any) -> PilotConfig:
+        # Create a clean baseline PilotConfig instance
+        cfg = PilotConfig()
+        
+        # Safely apply targeted overrides to nested dataclass attributes
+        if "allow_root" in kwargs:
+            cfg.security.root_enabled = kwargs["allow_root"]
+            
+        return cfg
+
+    return _factory
 
 
 @pytest.fixture
-def root_enabled_config():
-    """A PilotConfig with root access enabled."""
-    cfg = PilotConfig()
-    cfg.security.root_enabled = True
-    return cfg
+def default_config(config_factory: Callable[..., PilotConfig]) -> PilotConfig:
+    """
+    Provides a default PilotConfig instance.
+    Backward-compatible fixture for tests that don't need custom configurations.
+    """
+    return config_factory()
+
+
+@pytest.fixture
+def root_enabled_config(config_factory: Callable[..., PilotConfig]) -> PilotConfig:
+    """
+    Provides a PilotConfig instance with root access enabled.
+    Backward-compatible fixture replacing duplicated setup logic.
+    """
+    return config_factory(allow_root=True)
+
+
+@pytest.fixture(
+    params=[False, True],
+    ids=["root_disabled", "root_enabled"]
+)
+def parametrized_config(
+    request: pytest.FixtureRequest,
+    config_factory: Callable[..., PilotConfig]
+) -> PilotConfig:
+    """
+    Parametrized fixture yielding multiple PilotConfig instances.
+    
+    Automatically runs any dependent test multiple times (e.g., once 
+    with allow_root=False and once with allow_root=True) using descriptive IDs.
+    """
+    return config_factory(allow_root=request.param)
